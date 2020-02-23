@@ -1,0 +1,7 @@
+{
+    "name": "com.popcron.intercom",
+    "displayName": "Popcron Intercom",
+    "version": "1.0.0",
+    "unity": "2018.3",
+    "description": "A way to make two processes talk to each other."
+}
