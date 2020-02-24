@@ -1,5 +1,5 @@
 # Intercom
-Used for making two applications communicate with each other by using shared memory buffers. An example use case of this is avoiding Unity destroyed all code when a domain reload happens (when you compile while playing the game) issues by off loading the important code into a seperate process.
+Used for making two applications communicate with each other by using shared memory buffers. An example use case of this is avoiding Unity destroying everything when a domain reload happens (compiling while playing the game), by off loading the important code into a seperate process and then relaying it back to the main application.
 
 ## Requirements
 - .NET Framework 4.5
@@ -13,11 +13,8 @@ If using 2018.3.x or higher, you can add a new entry to the manifest.json file i
 "com.popcron.intercom": "https://github.com/popcron/intercom.git"
 ```
 
-If wanting to use this as a DLL for a different .NET based application, download the source and compile into a DLL file.
-
 ## How to
 Both application A and B need to use the same unique identifier (so that they could find each other). So when creating a new instance of an intercom, ensure that the identifier passed is the same for both sides. However, the first parameter, which is the Foo or Bar setting, one application must be Foo, and the other must be Bar (doesnt matter which one).
-
 ```cs
 Intercom intercom = new Intercom(IntercomSide.Foo, "Game1"); //in Game1.exe
 ```
