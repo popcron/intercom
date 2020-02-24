@@ -24,6 +24,7 @@ namespace Popcron.Intercom
         private MemoryMappedViewAccessor sharedView = null;
         private List<Invocation> queue = new List<Invocation>();
         private List<long> pastMessages = new List<long>();
+        private bool initialized;
 
         /// <summary>
         /// The side that this intercom is taking part of.
@@ -33,7 +34,7 @@ namespace Popcron.Intercom
         /// <summary>
         /// The unique identifier that should match the other intercom object.
         /// </summary>
-        public string Identifier { get; private set; }
+        public string Identifier { get; private set; } = null;
 
         /// <summary>
         /// The serializer to use when parsing data.
@@ -118,6 +119,11 @@ namespace Popcron.Intercom
         {
             get
             {
+                if (!initialized)
+                {
+                    return null;
+                }
+
                 if (MySide == IntercomSide.Bar)
                 {
                     if (barView == null)
@@ -165,6 +171,11 @@ namespace Popcron.Intercom
         {
             get
             {
+                if (!initialized)
+                {
+                    return null;
+                }
+
                 if (MySide == IntercomSide.Bar)
                 {
                     if (fooView == null)
@@ -213,9 +224,11 @@ namespace Popcron.Intercom
 
         public Intercom(IntercomSide source, string identifier)
         {
+            initialized = true;
             MySide = source;
             Identifier = identifier;
-            SetFinishedReadingState(source, true);
+
+            Invoke("Well hello there!");
         }
 
         /// <summary>
@@ -223,9 +236,12 @@ namespace Popcron.Intercom
         /// </summary>
         public void Invoke(string methodName, params object[] parameters)
         {
-            //store this message in a pool
-            Invocation message = new Invocation(methodName, parameters);
-            queue.Add(message);
+            if (initialized)
+            {
+                //store this message in a pool
+                Invocation message = new Invocation(methodName, parameters);
+                queue.Add(message);
+            }
         }
 
         /// <summary>
@@ -233,17 +249,16 @@ namespace Popcron.Intercom
         /// </summary>
         public bool IsFinishedReading(IntercomSide source)
         {
-            try
+            if (source == IntercomSide.Bar)
             {
-                int index = source == IntercomSide.Bar ? 0 : 1;
-                bool finished = Shared.ReadByte(index) == 1;
-                return finished;
+                return Shared.ReadByte(0) == 1;
             }
-            catch
+            else if (source == IntercomSide.Bar)
             {
-                //happens if shared memory file doesnt exist yet
-                return false;
+                return Shared.ReadByte(1) == 1;
             }
+
+            return false;
         }
 
         /// <summary>
@@ -251,8 +266,15 @@ namespace Popcron.Intercom
         /// </summary>
         public void SetFinishedReadingState(IntercomSide source, bool state)
         {
-            int index = source == IntercomSide.Bar ? 0 : 1;
-            Shared.Write(index, state ? (byte)1 : (byte)0);
+            byte value = state ? (byte)1 : (byte)0;
+            if (source == IntercomSide.Bar)
+            {
+                Shared.Write(0, value);
+            }
+            else if (source == IntercomSide.Bar)
+            {
+                Shared.Write(1, value);
+            }
         }
 
         /// <summary>
