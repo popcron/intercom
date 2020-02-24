@@ -32,6 +32,8 @@ To send a method, call `Intercom.Invoke(methodName, parameters)` method.
 
 Invoking a method isnt going to be instant, so if you require timing sensitive code, you can use the `InvokeTask` variant of the method instead.
 
+*Note: Invoking methods that are meant to be awaitable on the other side, are not going to be awaited for.*
+
 ## Receiving methods
 Decorating a method with the `[Invokey]` attribute will let the intercom system know that this **static** method can be automatically called upon, assuming the name and parameters match. Yes, duplicates of these are allowed.
 
