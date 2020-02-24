@@ -24,7 +24,6 @@ namespace Popcron.Intercom
         private MemoryMappedViewAccessor sharedView = null;
         private List<Invocation> queue = new List<Invocation>();
         private List<long> pastMessages = new List<long>();
-        private bool initialized;
 
         /// <summary>
         /// The side that this intercom is taking part of.
@@ -102,7 +101,7 @@ namespace Popcron.Intercom
                     try
                     {
                         string key = $"{Identifier}.Shared";
-                        MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, Capacity, MemoryMappedFileAccess.ReadWrite);
+                        MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, 2, MemoryMappedFileAccess.ReadWrite);
                         sharedView = memoryFile.CreateViewAccessor();
                     }
                     catch
@@ -119,11 +118,6 @@ namespace Popcron.Intercom
         {
             get
             {
-                if (!initialized)
-                {
-                    return null;
-                }
-
                 if (MySide == IntercomSide.Bar)
                 {
                     if (barView == null)
@@ -171,11 +165,6 @@ namespace Popcron.Intercom
         {
             get
             {
-                if (!initialized)
-                {
-                    return null;
-                }
-
                 if (MySide == IntercomSide.Bar)
                 {
                     if (fooView == null)
@@ -217,18 +206,11 @@ namespace Popcron.Intercom
             sharedView?.Dispose();
         }
 
-        private Intercom()
-        {
-
-        }
-
         public Intercom(IntercomSide source, string identifier)
         {
-            initialized = true;
             MySide = source;
             Identifier = identifier;
-
-            Invoke("Well hello there!");
+            Invoke("Hello World!");
         }
 
         /// <summary>
@@ -236,42 +218,39 @@ namespace Popcron.Intercom
         /// </summary>
         public void Invoke(string methodName, params object[] parameters)
         {
-            if (initialized)
-            {
-                //store this message in a pool
-                Invocation message = new Invocation(methodName, parameters);
-                queue.Add(message);
-            }
+            //store this message in a pool
+            Invocation message = new Invocation(methodName, parameters);
+            queue.Add(message);
         }
 
         /// <summary>
         /// Is this intercom finished reading?
         /// </summary>
-        public bool IsFinishedReading(IntercomSide source)
+        public ReadingState GetReadingState(IntercomSide source)
         {
             if (source == IntercomSide.Bar)
             {
-                return Shared.ReadByte(0) == 1;
+                return (ReadingState)Shared.ReadByte(0);
             }
-            else if (source == IntercomSide.Bar)
+            else if (source == IntercomSide.Foo)
             {
-                return Shared.ReadByte(1) == 1;
+                return (ReadingState)Shared.ReadByte(1);
             }
 
-            return false;
+            return ReadingState.None;
         }
 
         /// <summary>
         /// Sets the read state of this source to a value.
         /// </summary>
-        public void SetFinishedReadingState(IntercomSide source, bool state)
+        public void SetReadingState(IntercomSide source, ReadingState state)
         {
-            byte value = state ? (byte)1 : (byte)0;
+            byte value = (byte)state;
             if (source == IntercomSide.Bar)
             {
                 Shared.Write(0, value);
             }
-            else if (source == IntercomSide.Bar)
+            else if (source == IntercomSide.Foo)
             {
                 Shared.Write(1, value);
             }
@@ -338,15 +317,15 @@ namespace Popcron.Intercom
             }
 
             //the other application finished polling all messages
-            if (IsFinishedReading(OtherSide))
+            if (GetReadingState(OtherSide) == ReadingState.Finished)
             {
+                SetReadingState(OtherSide, ReadingState.Reading);
+
                 //send out the next batch of messages
                 if (queue.Count > 0)
                 {
                     SendQueue();
                 }
-
-                SetFinishedReadingState(OtherSide, false);
             }
 
             int position = 0;
@@ -359,7 +338,7 @@ namespace Popcron.Intercom
             if (pastMessages.Contains(id))
             {
                 //so were done then
-                SetFinishedReadingState(MySide, true);
+                SetReadingState(MySide, ReadingState.Finished);
                 return;
             }
 
@@ -398,12 +377,12 @@ namespace Popcron.Intercom
                     SendCallback(invokes[i], callback);
                 }
 
-                SetFinishedReadingState(MySide, true);
+                SetReadingState(MySide, ReadingState.Finished);
                 pastMessages.Add(id);
             }
             else
             {
-                SetFinishedReadingState(MySide, true);
+                SetReadingState(MySide, ReadingState.Finished);
             }
         }
 
