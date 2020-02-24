@@ -30,8 +30,14 @@ Intercom intercom = new Intercom(IntercomSide.Bar, "Game2"); //in Game2.exe
 ## Sending methods
 To send a method, call `Intercom.Invoke(methodName, parameters)` method.
 
-Invoking a method isnt going to be instant, so if you require timing sensitive code, you can use the `InvokeTask` variant of the method instead.
+Invoking a method isnt going to be instant, so if you need to ensure that the code after the invoke line is actually ran after the method is ran on the other side, then you can use the `InvokeTask` variant of the method instead to wait for that period.
+```cs
+Intercom intercom = new Intercom(IntercomSide.Foo, "Game1");
+await intercom.InvokeTask("Game.DeleteSave");
 
+//this will run after the Game.DeleteSave method ran in the other application
+CreateCustomSaveFile();
+```
 *Note: Invoking methods that are meant to be awaitable on the other side, are not going to be awaited for.*
 
 ## Receiving methods
