@@ -36,7 +36,7 @@ To send a method, call `Intercom.Invoke(methodName, parameters)` method.
 Invoking a method isnt going to be instant, so if you require timing sensitive code, you can use the `InvokeTask` variant of the method instead.
 
 ## Receiving methods
-Decorating a method with the `[Invokey]` attribute will let the intercom system know that this **static** method can be automatically called upon, assuming the name and parameters match.
+Decorating a method with the `[Invokey]` attribute will let the intercom system know that this **static** method can be automatically called upon, assuming the name and parameters match. Yes, duplicates of these are allowed.
 
 If you'd like to raw dog this, you can alternatively pass a method as a delegate to the `Poll` method, which will then call upon that method for you to process with manually.
 
