@@ -104,5 +104,10 @@ namespace Popcron.Intercom
 
             Parameters = parameters.ToArray();
         }
+
+        public void FinishedExecuting()
+        {
+
+        }
     }
 }

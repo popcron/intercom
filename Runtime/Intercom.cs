@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace Popcron.Intercom
 {
@@ -101,7 +102,7 @@ namespace Popcron.Intercom
                     try
                     {
                         string key = $"{Identifier}.Shared";
-                        MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, 2, MemoryMappedFileAccess.ReadWrite);
+                        MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, 2 + 4, MemoryMappedFileAccess.ReadWrite);
                         sharedView = memoryFile.CreateViewAccessor();
                     }
                     catch
@@ -223,21 +224,27 @@ namespace Popcron.Intercom
             queue.Add(message);
         }
 
+        public async Task InvokeTask(string methodName, params object[] parameters)
+        {
+            int frame = GetCurrentFrame(OtherSide);
+
+            //store this message in a pool
+            Invocation message = new Invocation(methodName, parameters);
+            queue.Add(message);
+
+            //wait for it to get delievered by checking when the other side went up
+            while (frame >= GetCurrentFrame(OtherSide))
+            {
+                await Task.Delay(1);
+            }
+        }
+
         /// <summary>
         /// Is this intercom finished reading?
         /// </summary>
         public ReadingState GetReadingState(IntercomSide source)
         {
-            if (source == IntercomSide.Bar)
-            {
-                return (ReadingState)Shared.ReadByte(0);
-            }
-            else if (source == IntercomSide.Foo)
-            {
-                return (ReadingState)Shared.ReadByte(1);
-            }
-
-            return ReadingState.None;
+            return (ReadingState)Shared.ReadByte((long)source);
         }
 
         /// <summary>
@@ -245,15 +252,23 @@ namespace Popcron.Intercom
         /// </summary>
         public void SetReadingState(IntercomSide source, ReadingState state)
         {
-            byte value = (byte)state;
-            if (source == IntercomSide.Bar)
-            {
-                Shared.Write(0, value);
-            }
-            else if (source == IntercomSide.Foo)
-            {
-                Shared.Write(1, value);
-            }
+            Shared.Write((long)source, (byte)state);
+        }
+
+        /// <summary>
+        /// The current execution frame for this side.
+        /// </summary>
+        public int GetCurrentFrame(IntercomSide side)
+        {
+            return Shared.ReadInt32((long)side + 2);
+        }
+
+        /// <summary>
+        /// Sets the execution from for this side.
+        /// </summary>
+        public void SetCurrentFrame(IntercomSide side, int value)
+        {
+            Shared.Write((long)side + 2, value);
         }
 
         /// <summary>
@@ -310,6 +325,7 @@ namespace Popcron.Intercom
         /// </summary>
         public void Poll(OnInvoked callback = null)
         {
+            SetCurrentFrame(MySide, GetCurrentFrame(MySide) + 1);
             MemoryMappedViewAccessor input = Input;
             if (input == null)
             {
@@ -374,7 +390,7 @@ namespace Popcron.Intercom
                 for (int i = 0; i < invokes.Count; i++)
                 {
                     //try and invoke globally
-                    SendCallback(invokes[i], callback);
+                    InvokeCallbacks(invokes[i], callback);
                 }
 
                 SetReadingState(MySide, ReadingState.Finished);
@@ -415,7 +431,7 @@ namespace Popcron.Intercom
             }
         }
 
-        private void SendCallback(Invocation inv, OnInvoked callback)
+        private void InvokeCallbacks(Invocation inv, OnInvoked callback)
         {
             EnsureMethodsExist();
 
@@ -453,13 +469,26 @@ namespace Popcron.Intercom
                         //cool match bro, hit it
                         if (match)
                         {
-                            methods[i].Invoke(null, inv.Parameters);
+                            CallMethod(methods[i], inv);
                         }
                     }
                 }
             }
 
             callback?.Invoke(inv);
+        }
+
+        private async void CallMethod(MethodInfo method, Invocation inv)
+        {
+            object result = method.Invoke(null, inv.Parameters);
+
+            //thing is a task, so await it
+            if (result != null && result is Task task)
+            {
+                await task;
+            }
+
+            inv.FinishedExecuting();
         }
     }
 }
