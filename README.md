@@ -13,6 +13,8 @@ If using 2018.3.x or higher, you can add a new entry to the manifest.json file i
 "com.popcron.intercom": "https://github.com/popcron/intercom.git"
 ```
 
+*Note: Nothing actually stops you from using this in any other .NET environment, since this library has no dependencies.**
+
 ## How to
 Both application A and B need to use the same unique identifier (so that they could find each other). So when creating a new instance of an intercom, ensure that the identifier passed is the same for both sides. However, the first parameter, which is the Foo or Bar setting, one application must be Foo, and the other must be Bar (doesnt matter which one).
 ```cs
