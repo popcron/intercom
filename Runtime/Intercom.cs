@@ -199,6 +199,13 @@ namespace Popcron.Intercom
             EnsureMethodsExist();
         }
 
+        ~Intercom()
+        {
+            fooView?.Dispose();
+            barView?.Dispose();
+            sharedView?.Dispose();
+        }
+
         private Intercom()
         {
 
