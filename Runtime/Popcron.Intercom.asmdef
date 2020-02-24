@@ -1,5 +1,5 @@
 {
-    "name": "Popcron.Intercom.Editor",
+    "name": "Popcron.Intercom",
     "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -9,5 +9,5 @@
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": true
+    "noEngineReferences": false
 }

@@ -7,7 +7,11 @@ namespace Popcron.Intercom
     [Serializable]
     public class Intercom
     {
-        public const int InitializeCapacity = 1024 * 1024;
+        /// <summary>
+        /// 8MB capacity here yo.
+        /// </summary>
+        public const int Capacity = 1024 * 1024 * 8;
+
         public delegate void OnInvoked(Invocation inv);
 
         private static Random random = new Random(DateTime.Now.Millisecond);
@@ -15,9 +19,8 @@ namespace Popcron.Intercom
         private MemoryMappedViewAccessor fooView;
         private MemoryMappedViewAccessor barView;
         private MemoryMappedViewAccessor sharedView;
-
-        public List<Invocation> queue = new List<Invocation>();
-        public List<long> pastMessages = new List<long>();
+        private List<Invocation> queue = new List<Invocation>();
+        private List<long> pastMessages = new List<long>();
 
         /// <summary>
         /// The side that this intercom is taking part of.
@@ -28,6 +31,11 @@ namespace Popcron.Intercom
         /// The unique identifier that should match the other intercom object.
         /// </summary>
         public string Identifier { get; private set; }
+
+        /// <summary>
+        /// The serializer to use when parsing data.
+        /// </summary>
+        public Serializer Serializer { get; set; } = new BinarySerializer();
 
         /// <summary>
         /// The intercom side that is opposite of this one.
@@ -90,7 +98,7 @@ namespace Popcron.Intercom
                     try
                     {
                         string key = $"{Identifier}.Shared";
-                        MemoryMappedFile memoryFile = MemoryMappedFile.OpenExisting(key);
+                        MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, Capacity, MemoryMappedFileAccess.ReadWrite);
                         sharedView = memoryFile.CreateViewAccessor();
                     }
                     catch
@@ -114,7 +122,7 @@ namespace Popcron.Intercom
                         try
                         {
                             string key = $"{Identifier}.{OtherSide}";
-                            MemoryMappedFile memoryFile = MemoryMappedFile.OpenExisting(key);
+                            MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, Capacity, MemoryMappedFileAccess.ReadWrite);
                             barView = memoryFile.CreateViewAccessor();
                         }
                         catch
@@ -132,7 +140,7 @@ namespace Popcron.Intercom
                         try
                         {
                             string key = $"{Identifier}.{OtherSide}";
-                            MemoryMappedFile memoryFile = MemoryMappedFile.OpenExisting(key);
+                            MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, Capacity, MemoryMappedFileAccess.ReadWrite);
                             fooView = memoryFile.CreateViewAccessor();
                         }
                         catch
@@ -159,7 +167,7 @@ namespace Popcron.Intercom
                     if (fooView == null)
                     {
                         string key = $"{Identifier}.{MySide}";
-                        MemoryMappedFile memoryFile = MemoryMappedFile.OpenExisting(key);
+                        MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, Capacity, MemoryMappedFileAccess.ReadWrite);
                         fooView = memoryFile.CreateViewAccessor();
                     }
 
@@ -170,7 +178,7 @@ namespace Popcron.Intercom
                     if (barView == null)
                     {
                         string key = $"{Identifier}.{MySide}";
-                        MemoryMappedFile memoryFile = MemoryMappedFile.OpenExisting(key);
+                        MemoryMappedFile memoryFile = MemoryMappedFile.CreateOrOpen(key, Capacity, MemoryMappedFileAccess.ReadWrite);
                         barView = memoryFile.CreateViewAccessor();
                     }
 
@@ -229,9 +237,9 @@ namespace Popcron.Intercom
         /// <summary>
         /// Sends the entire queue.
         /// </summary>
-        private void SendPooledMessages()
+        private void SendQueue()
         {
-            int position = 0;
+            long position = 0;
 
             //add unique id
             Output.Write(position, GetUniqueID());
@@ -254,7 +262,7 @@ namespace Popcron.Intercom
         /// <summary>
         /// Writes this message at this position in the buffer.
         /// </summary>
-        private void SendSingleMessage(Invocation invoke, ref int position)
+        private void SendSingleMessage(Invocation invoke, ref long position)
         {
             if (invoke == null)
             {
@@ -262,14 +270,15 @@ namespace Popcron.Intercom
             }
 
             //add the message length
-            int length = invoke.GetData().Length;
+            byte[] data = invoke.GetData(Serializer);
+            int length = data.Length;
             Output.Write(position, length);
             position += sizeof(int);
 
             //add all of the content
             for (int i = 0; i < length; i++)
             {
-                Output.Write(position, invoke.GetData()[i]);
+                Output.Write(position, data[i]);
                 position++;
             }
         }
@@ -291,7 +300,7 @@ namespace Popcron.Intercom
                 //send out the next batch of messages
                 if (queue.Count > 0)
                 {
-                    SendPooledMessages();
+                    SendQueue();
                 }
 
                 SetFinishedReadingState(OtherSide, false);
@@ -312,7 +321,7 @@ namespace Popcron.Intercom
             }
 
             //next 4 bytes is how many messages there are
-            int messages = input.ReadUInt16(position);
+            int messages = input.ReadInt32(position);
             position += sizeof(int);
 
             if (messages > 0)
@@ -321,7 +330,7 @@ namespace Popcron.Intercom
                 for (int m = 0; m < messages; m++)
                 {
                     //read message length
-                    int length = input.ReadUInt16(position);
+                    int length = input.ReadInt32(position);
                     position += sizeof(int);
 
                     //read message data itself
@@ -333,8 +342,11 @@ namespace Popcron.Intercom
                     }
 
                     //process data
-                    Invocation newInoke = new Invocation(data);
-                    invokes.Add(newInoke);
+                    if (data.Length > 0)
+                    {
+                        Invocation newInoke = new Invocation(data, Serializer);
+                        invokes.Add(newInoke);
+                    }
                 }
 
                 for (int i = 0; i < invokes.Count; i++)
