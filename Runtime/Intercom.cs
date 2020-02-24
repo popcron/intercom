@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO.MemoryMappedFiles;
+using System.Reflection;
 
 namespace Popcron.Intercom
 {
@@ -14,13 +15,13 @@ namespace Popcron.Intercom
 
         public delegate void OnInvoked(Invocation inv);
 
-        private static Random random = new Random(DateTime.Now.Millisecond);
-
+        private Random random = new Random(DateTime.Now.Millisecond);
         private MemoryMappedViewAccessor fooView;
         private MemoryMappedViewAccessor barView;
         private MemoryMappedViewAccessor sharedView;
         private List<Invocation> queue = new List<Invocation>();
         private List<long> pastMessages = new List<long>();
+        private List<MethodInfo> methods;
 
         /// <summary>
         /// The side that this intercom is taking part of.
@@ -60,7 +61,7 @@ namespace Popcron.Intercom
         /// <summary>
         /// Generates a unique long number.
         /// </summary>
-        private static long GetUniqueID()
+        private long GetUniqueID()
         {
             long min = long.MinValue;
             long max = long.MaxValue;
@@ -189,6 +190,11 @@ namespace Popcron.Intercom
                     return null;
                 }
             }
+        }
+
+        private Intercom()
+        {
+
         }
 
         public Intercom(IntercomSide source, string identifier)
@@ -351,14 +357,8 @@ namespace Popcron.Intercom
 
                 for (int i = 0; i < invokes.Count; i++)
                 {
-                    try
-                    {
-                        callback?.Invoke(invokes[i]);
-                    }
-                    catch
-                    {
-
-                    }
+                    //try and invoke globally
+                    SendCallback(invokes[i], callback);
                 }
 
                 SetFinishedReadingState(MySide, true);
@@ -368,6 +368,74 @@ namespace Popcron.Intercom
             {
                 SetFinishedReadingState(MySide, true);
             }
+        }
+
+        private void SendCallback(Invocation inv, OnInvoked callback)
+        {
+            //oops, cache is missing, o-oh
+            if (methods == null)
+            {
+                methods = new List<MethodInfo>();
+                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                for (int a = 0; a < assemblies.Length; a++)
+                {
+                    Type[] types = assemblies[a].GetTypes();
+                    for (int t = 0; t < types.Length; t++)
+                    {
+                        MethodInfo[] methods = types[t].GetMethods(BindingFlags.Static);
+                        for (int m = 0; m < methods.Length; m++)
+                        {
+                            Attribute invokey = methods[m].GetCustomAttribute(typeof(InvokeyAttribute));
+                            if (invokey != null)
+                            {
+                                this.methods.Add(methods[m]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            //try and do globally first
+            for (int i = 0; i < methods.Count; i++)
+            {
+                if (methods[i].Name == inv.MethodName)
+                {
+                    ParameterInfo[] parameterInfo = methods[i].GetParameters();
+                    if (parameterInfo.Length == inv.Parameters.Length)
+                    {
+                        //try and match these params
+                        bool match = true;
+                        for (int p = 0; p < parameterInfo.Length; p++)
+                        {
+                            Type source = parameterInfo[p].ParameterType;
+                            Type incoming = inv.Parameters[p].GetType();
+
+                            //strictly the same type
+                            if (source == incoming)
+                            {
+                                continue;
+                            }
+
+                            //eh close enough through inheritance
+                            if (source.IsSubclassOf(incoming))
+                            {
+                                continue;
+                            }
+
+                            match = false;
+                            break;
+                        }
+
+                        //cool match bro, hit it
+                        if (match)
+                        {
+                            methods[i].Invoke(null, inv.Parameters);
+                        }
+                    }
+                }
+            }
+
+            callback?.Invoke(inv);
         }
     }
 }
