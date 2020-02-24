@@ -414,7 +414,6 @@ namespace Popcron.Intercom
             //try and do globally first
             for (int i = 0; i < methods.Count; i++)
             {
-                UnityEngine.Debug.Log(methods[i].Name + " == " + inv.MethodName);
                 if (methods[i].Name == inv.MethodName)
                 {
                     ParameterInfo[] parameterInfo = methods[i].GetParameters();
