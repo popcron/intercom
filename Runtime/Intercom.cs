@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO.MemoryMappedFiles;
+using System.Linq;
 using System.Reflection;
 
 namespace Popcron.Intercom
@@ -15,13 +16,14 @@ namespace Popcron.Intercom
 
         public delegate void OnInvoked(Invocation inv);
 
+        private static List<MethodInfo> methods = null;
+
         private Random random = new Random(DateTime.Now.Millisecond);
-        private MemoryMappedViewAccessor fooView;
-        private MemoryMappedViewAccessor barView;
-        private MemoryMappedViewAccessor sharedView;
+        private MemoryMappedViewAccessor fooView = null;
+        private MemoryMappedViewAccessor barView = null;
+        private MemoryMappedViewAccessor sharedView = null;
         private List<Invocation> queue = new List<Invocation>();
         private List<long> pastMessages = new List<long>();
-        private List<MethodInfo> methods;
 
         /// <summary>
         /// The side that this intercom is taking part of.
@@ -192,6 +194,11 @@ namespace Popcron.Intercom
             }
         }
 
+        static Intercom()
+        {
+            EnsureMethodsExist();
+        }
+
         private Intercom()
         {
 
@@ -201,6 +208,7 @@ namespace Popcron.Intercom
         {
             MySide = source;
             Identifier = identifier;
+            SetFinishedReadingState(source, true);
         }
 
         /// <summary>
@@ -370,7 +378,7 @@ namespace Popcron.Intercom
             }
         }
 
-        private void SendCallback(Invocation inv, OnInvoked callback)
+        private static void EnsureMethodsExist()
         {
             //oops, cache is missing, o-oh
             if (methods == null)
@@ -382,22 +390,31 @@ namespace Popcron.Intercom
                     Type[] types = assemblies[a].GetTypes();
                     for (int t = 0; t < types.Length; t++)
                     {
-                        MethodInfo[] methods = types[t].GetMethods(BindingFlags.Static);
+                        MethodInfo[] methods = types[t].GetMethods();
                         for (int m = 0; m < methods.Length; m++)
                         {
-                            Attribute invokey = methods[m].GetCustomAttribute(typeof(InvokeyAttribute));
-                            if (invokey != null)
+                            if (methods[m].IsStatic)
                             {
-                                this.methods.Add(methods[m]);
+                                bool hasAttribute = methods[m].GetCustomAttributes(typeof(InvokeyAttribute), false).Any();
+                                if (hasAttribute)
+                                {
+                                    Intercom.methods.Add(methods[m]);
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+
+        private void SendCallback(Invocation inv, OnInvoked callback)
+        {
+            EnsureMethodsExist();
 
             //try and do globally first
             for (int i = 0; i < methods.Count; i++)
             {
+                UnityEngine.Debug.Log(methods[i].Name + " == " + inv.MethodName);
                 if (methods[i].Name == inv.MethodName)
                 {
                     ParameterInfo[] parameterInfo = methods[i].GetParameters();
