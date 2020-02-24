@@ -19,7 +19,10 @@ If wanting to use this as a DLL for a different .NET based application, download
 Both application A and B need to use the same unique identifier (so that they could find each other). So when creating a new instance of an intercom, ensure that the identifier passed is the same for both sides. However, the first parameter, which is the Foo or Bar setting, one application must be Foo, and the other must be Bar (doesnt matter which one).
 
 ```cs
-Intercom intercom = new Intercom(IntercomSide.Foo, "Game1");
+Intercom intercom = new Intercom(IntercomSide.Foo, "Game1"); //in Game1.exe
+```
+```cs
+Intercom intercom = new Intercom(IntercomSide.Bar, "Game2"); //in Game2.exe
 ```
 
 **Basically:**
