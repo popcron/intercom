@@ -1,5 +1,5 @@
 # Intercom
-Used for making two applications communicate with each other. An example use case of this is avoiding Unity destroyed all code when a domain reload happens (when you compile while playing the game) issues by off loading the important code into a seperate process.
+Used for making two applications communicate with each other by using shared memory buffers. An example use case of this is avoiding Unity destroyed all code when a domain reload happens (when you compile while playing the game) issues by off loading the important code into a seperate process.
 
 ## Requirements
 - .NET Framework 4.5
@@ -42,8 +42,13 @@ If you'd like to raw dog this, you can alternatively pass a method as a delegate
 
 ```cs
 Intercom intercom = new Intercom(IntercomSide.Foo, "Game1");
-intercom.Poll(OnInvoked);
+while (true)
+{
+    intercom.Poll(OnInvoked);
+    await Task.Delay(1);
+}
 
+//will get called when the other application sends something our way
 private void OnInvoke(Invocation inv)
 {
     if (inv.MethodName == "Boo") //do whatcha want
